@@ -37,10 +37,10 @@ public class CustomDataSource implements DataSource {
                     try {
                         props.load(CustomDataSource.class.getClassLoader().getResourceAsStream("app.properties"));
                         instance = new CustomDataSource(
-                                props.getProperty("spring.datasource.driver-class-name"),
-                                props.getProperty("spring.datasource.url"),
-                                props.getProperty("spring.datasource.password"),
-                                props.getProperty("spring.datasource.username")
+                                props.getProperty("postgres.driver"),
+                                props.getProperty("postgres.url"),
+                                props.getProperty("postgres.password"),
+                                props.getProperty("postgres.name")
                         );
                     } catch (IOException e) {
                         e.printStackTrace();
