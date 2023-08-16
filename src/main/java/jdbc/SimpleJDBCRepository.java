@@ -16,121 +16,140 @@ import java.util.List;
 @NoArgsConstructor
 public class SimpleJDBCRepository {
 
+    private static final String CREATE_USER_SQL = """
+            INSERT INTO myusers (firstname, lastname, age)
+            VALUES (?, ?, ?);
+            """;
+    private static final String UPDATE_USER_SQL = """
+            UPDATE myusers 
+            SET firstname = ?, lastname = ?, age = ? 
+            WHERE id = ?;
+            """;
+    private static final String DELETE_USER = """
+            DELETE FROM myusers 
+            WHERE id = ?;
+            """;
+    private static final String FIND_USER_BY_ID_SQL = """
+            SELECT id, firstname, lastname, age
+            FROM myusers
+            WHERE id = ?;
+            """;
+    private static final String FIND_USER_BY_NAME_SQL = """
+            SELECT id, firstname, lastname, age
+            FROM myusers
+            WHERE firstname = ?;
+            """;
+    private static final String FIND_ALL_USER_SQL = """
+            SELECT id, firstname, lastname, age
+            FROM myusers
+            """;
     private Connection connection = null;
     private PreparedStatement ps = null;
     private Statement st = null;
 
-    private static final String createUserSQL = "INSERT INTO myusers (firstname, lastname, age) VALUES (?, ?, ?)";
-    private static final String updateUserSQL = "UPDATE myusers SET firstname = ?, lastname = ?, age = ? WHERE id = ?";
-    private static final String deleteUser = "DELETE FROM myusers WHERE id = ?";
-    private static final String findUserByIdSQL = "SELECT id, firstname, lastname, age FROM myusers WHERE id = ?";
-    private static final String findUserByNameSQL = "SELECT id, firstname, lastname, age FROM myusers WHERE firstname = ?";
-    private static final String findAllUserSQL = "SELECT id, firstname, lastname, age FROM myusers";
-
     public Long createUser(User user) {
-        try(Connection connection1 = CustomDataSource.getInstance().getConnection();
-            PreparedStatement prepareStatement = connection1.prepareStatement(createUserSQL, Statement.RETURN_GENERATED_KEYS)){
-            prepareStatement.setString(1, user.getFirstName());
-            prepareStatement.setString(2, user.getLastName());
-            prepareStatement.setInt(3, user.getAge());
-            int affectedRows = prepareStatement.executeUpdate();
+        try (Connection con = CustomDataSource.getInstance().getConnection();
+             PreparedStatement preparedStatement = con.prepareStatement(CREATE_USER_SQL, Statement.RETURN_GENERATED_KEYS)) {
+            preparedStatement.setString(1, user.getFirstName());
+            preparedStatement.setString(2, user.getLastName());
+            preparedStatement.setInt(3, user.getAge());
 
-            if (affectedRows == 0) {
-                throw new SQLException("Creating user failed, no rows affected.");
+            preparedStatement.executeUpdate();
+            ResultSet generatedKeys = preparedStatement.getGeneratedKeys();
+            Long userId = null;
+            if (generatedKeys.next()) {
+                userId = generatedKeys.getLong("id");
+                user.setId(userId);
             }
-
-            ResultSet resultSet = prepareStatement.getGeneratedKeys();
-            if (resultSet.next()) {
-                return resultSet.getLong(1);
-            }else {
-                throw new SQLException("Creating user failed, no ID obtained.");
-            }
-        } catch (SQLException ex) {
-            throw new RuntimeException(ex);
+            return userId;
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
     }
 
     public User findUserById(Long userId) {
-        try(Connection connection1 = CustomDataSource.getInstance().getConnection();
-            PreparedStatement prepareStatement = connection1.prepareStatement(findUserByIdSQL)){
-            prepareStatement.setLong(1, userId);
-            ResultSet resultSet = prepareStatement.executeQuery();
-            if (!resultSet.next()) {
-                throw new SQLException("User with id=" + userId + "not found!");
+        try (Connection con = CustomDataSource.getInstance().getConnection();
+             PreparedStatement preparedStatement = con.prepareStatement(FIND_USER_BY_ID_SQL)) {
+            preparedStatement.setLong(1, userId);
+
+            ResultSet resultSet = preparedStatement.executeQuery();
+            User user = null;
+            if (resultSet.next()) {
+                user = buildUser(resultSet);
             }
-            Long id = resultSet.getLong("id");
-            String firstName = resultSet.getString("firstname");
-            String lastName = resultSet.getString("lastname");
-            int age = resultSet.getInt("age");
-            return new User(id, firstName, lastName, age);
-        } catch (SQLException ex) {
-            throw new RuntimeException(ex);
+            return user;
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
     }
 
     public User findUserByName(String userName) {
-        try(Connection connection1 = CustomDataSource.getInstance().getConnection();
-            PreparedStatement prepareStatement = connection1.prepareStatement(findUserByNameSQL)){
-            prepareStatement.setString(1, userName);
-            ResultSet resultSet = prepareStatement.executeQuery();
-            if (!resultSet.next()) {
-                throw new SQLException("User with name=" + userName + "not found!");
+        try (Connection con = CustomDataSource.getInstance().getConnection();
+             PreparedStatement preparedStatement = con.prepareStatement(FIND_USER_BY_NAME_SQL)) {
+            preparedStatement.setString(1, userName);
+
+            ResultSet resultSet = preparedStatement.executeQuery();
+            User user = null;
+            if (resultSet.next()) {
+                user = buildUser(resultSet);
             }
-            Long id = resultSet.getLong("id");
-            String firstName = resultSet.getString("firstname");
-            String lastName = resultSet.getString("lastname");
-            int age = resultSet.getInt("age");
-            return new User(id, firstName, lastName, age);
-        } catch (SQLException ex) {
-            throw new RuntimeException(ex);
+            return user;
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
     }
 
     public List<User> findAllUser() {
         List<User> users = new ArrayList<>();
-        try(Connection connection1 = CustomDataSource.getInstance().getConnection();
-            Statement statement = connection1.createStatement()){
-            ResultSet resultSet = statement.executeQuery(findAllUserSQL);
-            while(resultSet.next()) {
-                Long id = resultSet.getLong("id");
-                String firstName = resultSet.getString("firstname");
-                String lastName = resultSet.getString("lastname");
-                int age = resultSet.getInt("age");
-                users.add(new User(id, firstName, lastName, age));
+        try (Connection con = CustomDataSource.getInstance().getConnection();
+             PreparedStatement preparedStatement = con.prepareStatement(FIND_ALL_USER_SQL)) {
+
+            ResultSet resultSet = preparedStatement.executeQuery();
+            while (resultSet.next()) {
+                users.add(buildUser(resultSet));
             }
             return users;
-        } catch (SQLException ex) {
-            throw new RuntimeException(ex);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
     }
 
     public User updateUser(User user) {
-        try(Connection connection1 = CustomDataSource.getInstance().getConnection();
-            PreparedStatement prepareStatement = connection1.prepareStatement(updateUserSQL)){
-            prepareStatement.setString(1, user.getFirstName());
-            prepareStatement.setString(2, user.getLastName());
-            prepareStatement.setInt(3, user.getAge());
-            prepareStatement.setLong(4, user.getId());
-            int affectedRows = prepareStatement.executeUpdate();
-            if (affectedRows == 0) {
-                throw new SQLException("User with id=" + user.getId() + " not found!");
+        try (Connection con = CustomDataSource.getInstance().getConnection();
+             PreparedStatement preparedStatement = con.prepareStatement(UPDATE_USER_SQL)) {
+            preparedStatement.setString(1, user.getFirstName());
+            preparedStatement.setString(2, user.getLastName());
+            preparedStatement.setInt(3, user.getAge());
+            preparedStatement.setLong(4, user.getId());
+
+            User updatedUser = null;
+            int updatedRows = preparedStatement.executeUpdate();
+            if (updatedRows == 1) {
+                updatedUser = findUserById(user.getId());
             }
-            return user;
-        } catch (SQLException ex) {
-            throw new RuntimeException(ex);
+            return updatedUser;
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
     }
 
     public void deleteUser(Long userId) {
-        try(Connection connection1 = CustomDataSource.getInstance().getConnection();
-            PreparedStatement prepareStatement = connection1.prepareStatement(deleteUser)){
-            prepareStatement.setLong(1, userId);
-            int affectedRows = prepareStatement.executeUpdate();
-            if (affectedRows == 0) {
-                throw new SQLException("User with id=" + userId + " not found!");
-            }
-        } catch (SQLException ex) {
-            throw new RuntimeException(ex);
+        try (Connection con = CustomDataSource.getInstance().getConnection();
+             PreparedStatement preparedStatement = con.prepareStatement(DELETE_USER)) {
+            preparedStatement.setLong(1, userId);
+
+            preparedStatement.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
+    }
+
+    private User buildUser(ResultSet resultSet) throws SQLException {
+        return User.builder()
+                .id(resultSet.getLong("id"))
+                .firstName(resultSet.getString("firstname"))
+                .lastName(resultSet.getString("lastname"))
+                .age(resultSet.getInt("age"))
+                .build();
     }
 }
